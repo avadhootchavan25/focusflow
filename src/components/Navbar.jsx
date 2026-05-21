@@ -29,6 +29,7 @@ export default function Navbar() {
           <button onClick={() => go("/focus")} className={`px-4 py-2 rounded-2xl ${item("/focus")}`}>Focus</button>
           <button onClick={() => go("/groups")} className={`px-4 py-2 rounded-2xl ${item("/groups")}`}>Groups</button>
           <button onClick={() => go("/notes")} className={`px-4 py-2 rounded-2xl ${item("/notes")}`}>Notes</button>
+          <button onClick={() => go("/titi-ai")} className={`px-4 py-2 rounded-2xl ${item("/titi-ai")}`}>Titi AI</button>
           <button onClick={() => go("/leaderboard")} className={`px-4 py-2 rounded-2xl ${item("/leaderboard")}`}>Leaderboard</button>
           <button onClick={() => go("/profile")} className={`px-4 py-2 rounded-2xl ${item("/profile")}`}>Profile</button>
         </div>
@@ -44,6 +45,7 @@ export default function Navbar() {
               <button onClick={() => go("/focus")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/focus")}`}>Focus Room</button>
               <button onClick={() => go("/groups")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/groups")}`}>Study Groups</button>
               <button onClick={() => go("/notes")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/notes")}`}>Notes</button>
+              <button onClick={() => go("/titi-ai")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/titi-ai")}`}>Titi AI</button>
               <button onClick={() => go("/leaderboard")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/leaderboard")}`}>Leaderboard</button>
               <button onClick={() => go("/profile")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/profile")}`}>Profile</button>
             </div>
