@@ -1,7 +1,7 @@
 import { db, auth } from "../firebase"
 import { doc, getDoc, setDoc } from "firebase/firestore"
 
-export const getUserXP = async () => {
+export async function getUserXP() {
   const user = auth.currentUser
   if (!user) return null
 
@@ -16,6 +16,9 @@ export const getUserXP = async () => {
       xp: 0,
       level: 1,
       sessions: 0,
+      dailyFocusMinutes: 0,
+      totalFocusMinutes: 0,
+      lastFocusDate: null,
     }
 
     await setDoc(ref, data, { merge: true })
@@ -28,10 +31,13 @@ export const getUserXP = async () => {
     xp: data.xp || 0,
     level: data.level || 1,
     sessions: data.sessions || 0,
+    dailyFocusMinutes: data.dailyFocusMinutes || 0,
+    totalFocusMinutes: data.totalFocusMinutes || 0,
+    lastFocusDate: data.lastFocusDate || null,
   }
 }
 
-export const addXP = async (amount) => {
+export async function addXP(amount) {
   const user = auth.currentUser
   if (!user) return
 
@@ -47,12 +53,7 @@ export const addXP = async (amount) => {
     sessions: 0,
   }
 
-  if (snap.exists()) {
-    data = {
-      ...data,
-      ...snap.data(),
-    }
-  }
+  if (snap.exists()) data = { ...data, ...snap.data() }
 
   let xp = data.xp || 0
   let level = data.level || 1
@@ -64,19 +65,44 @@ export const addXP = async (amount) => {
     level += 1
   }
 
+  await setDoc(ref, { ...data, xp, level, updatedAt: new Date() }, { merge: true })
+}
+
+export async function completeFocusSession(minutes) {
+  const user = auth.currentUser
+  if (!user) return
+
+  const today = new Date().toISOString().split("T")[0]
+  const ref = doc(db, "users", user.uid)
+  const snap = await getDoc(ref)
+
+  let data = {
+    sessions: 0,
+    dailyFocusMinutes: 0,
+    totalFocusMinutes: 0,
+    lastFocusDate: null,
+  }
+
+  if (snap.exists()) data = { ...data, ...snap.data() }
+
+  const sameDay = data.lastFocusDate === today
+
   await setDoc(
     ref,
     {
-      ...data,
-      xp,
-      level,
+      sessions: (data.sessions || 0) + 1,
+      dailyFocusMinutes: sameDay
+        ? (data.dailyFocusMinutes || 0) + minutes
+        : minutes,
+      totalFocusMinutes: (data.totalFocusMinutes || 0) + minutes,
+      lastFocusDate: today,
       updatedAt: new Date(),
     },
     { merge: true }
   )
 }
 
-export const addSession = async () => {
+export async function addSession() {
   const user = auth.currentUser
   if (!user) return
 
@@ -86,12 +112,5 @@ export const addSession = async () => {
   let sessions = 0
   if (snap.exists()) sessions = snap.data().sessions || 0
 
-  await setDoc(
-    ref,
-    {
-      sessions: sessions + 1,
-      updatedAt: new Date(),
-    },
-    { merge: true }
-  )
+  await setDoc(ref, { sessions: sessions + 1, updatedAt: new Date() }, { merge: true })
 }

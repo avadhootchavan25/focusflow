@@ -1,20 +1,45 @@
 import { useEffect, useState } from "react"
-import { auth } from "../firebase"
+import { auth, db } from "../firebase"
+import { doc, getDoc } from "firebase/firestore"
 import { getUserXP } from "../utils/xp"
+import { getUserStreak } from "../utils/streak"
 import { motion } from "framer-motion"
 
 export default function Dashboard() {
-  const [xpData, setXpData] = useState({ xp: 0, level: 1 })
+  const [xpData, setXpData] = useState({
+    xp: 0,
+    level: 1,
+    sessions: 0,
+    dailyFocusMinutes: 0,
+    totalFocusMinutes: 0,
+  })
+
+  const [username, setUsername] = useState("Student")
+  const [streak, setStreak] = useState(0)
 
   useEffect(() => {
     const load = async () => {
       const data = await getUserXP()
       if (data) setXpData(data)
+
+      const streakData = await getUserStreak()
+      setStreak(streakData.streak || 0)
+
+      const user = auth.currentUser
+      if (user) {
+        const snap = await getDoc(doc(db, "users", user.uid))
+        if (snap.exists()) {
+          setUsername(snap.data().username || user.email?.split("@")[0] || "Student")
+        }
+      }
     }
+
     load()
   }, [])
 
   const progress = Math.min((xpData.xp / (xpData.level * 100)) * 100, 100)
+  const dailyGoal = 120
+  const dailyProgress = Math.min((xpData.dailyFocusMinutes / dailyGoal) * 100, 100)
 
   return (
     <div className="space-y-8">
@@ -25,22 +50,42 @@ export default function Dashboard() {
         <div className="relative">
           <p className="text-blue-300 font-bold uppercase text-sm">Dashboard</p>
           <h1 className="text-4xl md:text-6xl font-black mt-3">
-            Welcome back, {auth.currentUser?.email?.split("@")[0] || "Student"}
+            Welcome back, {username}
           </h1>
           <p className="text-gray-300 mt-4 max-w-2xl">
-            Track your progress, start focus sessions, join groups, and level up.
+            Track today’s focus, XP, streaks, and progress.
           </p>
         </div>
       </section>
 
-      <section className="grid md:grid-cols-3 gap-5">
+      <section className="grid md:grid-cols-4 gap-5">
         <motion.div className="card" whileHover={{ scale: 1.02 }}>
           <p className="text-gray-400">Current Level</p>
           <h2 className="text-6xl font-black mt-3">{xpData.level}</h2>
           <p className="text-blue-300 mt-2">Keep studying to level up.</p>
         </motion.div>
 
-        <motion.div className="card md:col-span-2" whileHover={{ scale: 1.01 }}>
+        <motion.div className="card" whileHover={{ scale: 1.02 }}>
+          <p className="text-gray-400">Daily Streak</p>
+          <h2 className="text-6xl font-black mt-3">🔥 {streak}</h2>
+          <p className="text-orange-300 mt-2">Days in a row</p>
+        </motion.div>
+
+        <motion.div className="card" whileHover={{ scale: 1.02 }}>
+          <p className="text-gray-400">Sessions</p>
+          <h2 className="text-6xl font-black mt-3">{xpData.sessions || 0}</h2>
+          <p className="text-green-300 mt-2">Completed sessions</p>
+        </motion.div>
+
+        <motion.div className="card" whileHover={{ scale: 1.02 }}>
+          <p className="text-gray-400">Today</p>
+          <h2 className="text-6xl font-black mt-3">{xpData.dailyFocusMinutes || 0}</h2>
+          <p className="text-purple-300 mt-2">Minutes focused</p>
+        </motion.div>
+      </section>
+
+      <section className="grid lg:grid-cols-2 gap-5">
+        <div className="card">
           <p className="text-gray-400">XP Progress</p>
           <div className="mt-6 h-5 bg-white/10 rounded-full overflow-hidden">
             <div
@@ -51,7 +96,20 @@ export default function Dashboard() {
           <p className="text-gray-400 mt-3">
             {xpData.xp} / {xpData.level * 100} XP
           </p>
-        </motion.div>
+        </div>
+
+        <div className="card">
+          <p className="text-gray-400">Daily Focus Goal</p>
+          <div className="mt-6 h-5 bg-white/10 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 to-blue-500 rounded-full"
+              style={{ width: `${dailyProgress}%` }}
+            />
+          </div>
+          <p className="text-gray-400 mt-3">
+            {xpData.dailyFocusMinutes || 0} / {dailyGoal} minutes today
+          </p>
+        </div>
       </section>
 
       <section className="grid md:grid-cols-3 gap-5">
@@ -65,10 +123,10 @@ export default function Dashboard() {
           <p className="text-gray-400 mt-2">Join rooms and chat live.</p>
         </a>
 
-        <div className="card">
-          <h3 className="text-2xl font-black">Streak</h3>
-          <p className="text-gray-400 mt-2">Daily streak system coming next.</p>
-        </div>
+        <a href="/leaderboard" className="card hover:scale-[1.02] transition block">
+          <h3 className="text-2xl font-black">Leaderboard</h3>
+          <p className="text-gray-400 mt-2">See your rank.</p>
+        </a>
       </section>
     </div>
   )

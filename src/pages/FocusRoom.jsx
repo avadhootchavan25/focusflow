@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
-import { addXP } from "../utils/xp"
+import { addXP, completeFocusSession } from "../utils/xp"
+import { updateStreak } from "../utils/streak"
 
 export default function FocusRoom() {
   const presets = [
@@ -14,6 +15,18 @@ export default function FocusRoom() {
   const [running, setRunning] = useState(false)
   const [earnedXP, setEarnedXP] = useState(0)
   const [sessions, setSessions] = useState(0)
+  const [customMinutes, setCustomMinutes] = useState("")
+
+  useEffect(() => {
+    const warn = (e) => {
+      if (!running) return
+      e.preventDefault()
+      e.returnValue = "Your focus session is still running. Pause before leaving."
+    }
+
+    window.addEventListener("beforeunload", warn)
+    return () => window.removeEventListener("beforeunload", warn)
+  }, [running])
 
   useEffect(() => {
     if (!running) return
@@ -21,10 +34,7 @@ export default function FocusRoom() {
     const timer = setInterval(() => {
       setSeconds((prev) => {
         if (prev <= 1) {
-          setRunning(false)
-          addXP(selected.xp)
-          setEarnedXP((x) => x + selected.xp)
-          setSessions((s) => s + 1)
+          finishSession()
           return 0
         }
         return prev - 1
@@ -34,6 +44,18 @@ export default function FocusRoom() {
     return () => clearInterval(timer)
   }, [running, selected])
 
+  const finishSession = async () => {
+    setRunning(false)
+
+    const minutesCompleted = Math.round(selected.value / 60)
+    await addXP(selected.xp)
+    await completeFocusSession(minutesCompleted)
+    await updateStreak()
+
+    setEarnedXP((x) => x + selected.xp)
+    setSessions((s) => s + 1)
+  }
+
   const progress = useMemo(() => {
     return Math.max(0, Math.min(100, ((selected.value - seconds) / selected.value) * 100))
   }, [seconds, selected])
@@ -42,9 +64,26 @@ export default function FocusRoom() {
   const secs = seconds % 60
 
   const choosePreset = (preset) => {
+    if (running) return
     setSelected(preset)
     setSeconds(preset.value)
-    setRunning(false)
+  }
+
+  const applyCustomTimer = () => {
+    if (running) return
+
+    const mins = Number(customMinutes)
+    if (!mins || mins < 1) return
+
+    const custom = {
+      label: `${mins} min`,
+      value: mins * 60,
+      xp: Math.max(5, mins),
+    }
+
+    setSelected(custom)
+    setSeconds(custom.value)
+    setCustomMinutes("")
   }
 
   const resetTimer = () => {
@@ -73,7 +112,7 @@ export default function FocusRoom() {
           </h1>
 
           <p className="text-gray-300 mt-4 max-w-xl">
-            Pick a session, start the timer, and earn XP when you complete focused study.
+            Start a session and stay locked in. Pause before leaving.
           </p>
 
           <div className="flex gap-3 mt-8 flex-wrap justify-center">
@@ -81,6 +120,7 @@ export default function FocusRoom() {
               <button
                 key={preset.label}
                 onClick={() => choosePreset(preset)}
+                disabled={running}
                 className={`btn px-6 py-3 ${
                   selected.label === preset.label
                     ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
@@ -91,6 +131,30 @@ export default function FocusRoom() {
               </button>
             ))}
           </div>
+
+          <div className="mt-5 flex gap-3 w-full max-w-md">
+            <input
+              type="number"
+              min="1"
+              disabled={running}
+              value={customMinutes}
+              onChange={(e) => setCustomMinutes(e.target.value)}
+              placeholder="Custom minutes"
+            />
+            <button
+              disabled={running}
+              onClick={applyCustomTimer}
+              className="btn bg-white/10 text-white whitespace-nowrap"
+            >
+              Set
+            </button>
+          </div>
+
+          {running && (
+            <p className="mt-5 text-orange-300 font-semibold">
+              Focus lock active. Pause before leaving the site.
+            </p>
+          )}
 
           <motion.div
             animate={running ? { scale: [1, 1.03, 1] } : { scale: 1 }}
@@ -121,10 +185,7 @@ export default function FocusRoom() {
               {running ? "Pause Session" : "Start Session"}
             </button>
 
-            <button
-              onClick={resetTimer}
-              className="btn px-8 py-4 bg-white/10 text-white"
-            >
+            <button onClick={resetTimer} className="btn px-8 py-4 bg-white/10 text-white">
               Reset
             </button>
           </div>
@@ -142,19 +203,19 @@ export default function FocusRoom() {
           </div>
 
           <div className="card">
-            <p className="text-gray-400">XP Earned</p>
+            <p className="text-gray-400">XP Earned Today</p>
             <h3 className="text-5xl font-black mt-3">{earnedXP}</h3>
           </div>
 
           <div className="card">
-            <p className="text-gray-400">Sessions Done</p>
+            <p className="text-gray-400">Sessions Completed</p>
             <h3 className="text-5xl font-black mt-3">{sessions}</h3>
           </div>
 
           <div className="card">
-            <p className="text-gray-400">Focus Rule</p>
+            <p className="text-gray-400">Focus Lock</p>
             <p className="text-xl font-bold mt-3">
-              One tab. One task. No switching.
+              Leaving is blocked while running.
             </p>
           </div>
         </motion.aside>
