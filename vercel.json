@@ -1,0 +1,32 @@
+{
+  "rewrites": [
+    {
+      "source": "/dashboard",
+      "destination": "/"
+    },
+    {
+      "source": "/profile",
+      "destination": "/"
+    },
+    {
+      "source": "/leaderboard",
+      "destination": "/"
+    },
+    {
+      "source": "/focus",
+      "destination": "/"
+    },
+    {
+      "source": "/groups",
+      "destination": "/"
+    },
+    {
+      "source": "/notes",
+      "destination": "/"
+    },
+    {
+      "source": "/titi-ai",
+      "destination": "/"
+    }
+  ]
+}
