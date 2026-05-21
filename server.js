@@ -1,10 +1,16 @@
+import express from "express"
+import cors from "cors"
+import dotenv from "dotenv"
+
+dotenv.config({ path: ".env.local" })
+
+const app = express()
+app.use(cors())
+app.use(express.json())
+
 const GEMINI_MODEL = "gemini-1.5-flash-latest"
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" })
-  }
-
+app.post("/api/titi", async (req, res) => {
   try {
     const { messages } = req.body || {}
 
@@ -16,7 +22,7 @@ export default async function handler(req, res) {
 
     if (!apiKey) {
       return res.status(500).json({
-        error: "Missing GEMINI_API_KEY. Add it in Vercel Environment Variables.",
+        error: "Missing GEMINI_API_KEY in .env.local",
       })
     }
 
@@ -69,10 +75,14 @@ Reply as Titi:
 
     const reply =
       data.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "I could not generate a reply right now."
+      "I couldn't generate a reply."
 
-    return res.status(200).json({ reply })
+    res.json({ reply })
   } catch (err) {
-    return res.status(500).json({ error: err.message })
+    res.status(500).json({ error: err.message })
   }
-}
+})
+
+app.listen(3001, () => {
+  console.log("Titi AI server running on http://localhost:3001")
+})

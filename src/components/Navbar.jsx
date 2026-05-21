@@ -25,13 +25,33 @@ export default function Navbar() {
         </button>
 
         <div className="hidden md:flex items-center gap-2">
-          <button onClick={() => go("/dashboard")} className={`px-4 py-2 rounded-2xl ${item("/dashboard")}`}>Dashboard</button>
-          <button onClick={() => go("/focus")} className={`px-4 py-2 rounded-2xl ${item("/focus")}`}>Focus</button>
-          <button onClick={() => go("/groups")} className={`px-4 py-2 rounded-2xl ${item("/groups")}`}>Groups</button>
-          <button onClick={() => go("/notes")} className={`px-4 py-2 rounded-2xl ${item("/notes")}`}>Notes</button>
-          <button onClick={() => go("/titi-ai")} className={`px-4 py-2 rounded-2xl ${item("/titi-ai")}`}>Titi AI</button>
-          <button onClick={() => go("/leaderboard")} className={`px-4 py-2 rounded-2xl ${item("/leaderboard")}`}>Leaderboard</button>
-          <button onClick={() => go("/profile")} className={`px-4 py-2 rounded-2xl ${item("/profile")}`}>Profile</button>
+          <button onClick={() => go("/dashboard")} className={`px-4 py-2 rounded-2xl ${item("/dashboard")}`}>
+            Dashboard
+          </button>
+
+          <button onClick={() => go("/focus")} className={`px-4 py-2 rounded-2xl ${item("/focus")}`}>
+            Focus
+          </button>
+
+          <button onClick={() => go("/groups")} className={`px-4 py-2 rounded-2xl ${item("/groups")}`}>
+            Groups
+          </button>
+
+          <button onClick={() => go("/notes")} className={`px-4 py-2 rounded-2xl ${item("/notes")}`}>
+            Notes
+          </button>
+
+          <button onClick={() => go("/titi-ai")} className={`px-4 py-2 rounded-2xl ${item("/titi-ai")}`}>
+            Study Assistant
+          </button>
+
+          <button onClick={() => go("/leaderboard")} className={`px-4 py-2 rounded-2xl ${item("/leaderboard")}`}>
+            Leaderboard
+          </button>
+
+          <button onClick={() => go("/profile")} className={`px-4 py-2 rounded-2xl ${item("/profile")}`}>
+            Profile
+          </button>
         </div>
 
         <div className="relative md:hidden">
@@ -40,14 +60,34 @@ export default function Navbar() {
           </button>
 
           {open && (
-            <div className="absolute right-0 mt-3 w-60 glass rounded-3xl p-3 shadow-2xl border border-white/10">
-              <button onClick={() => go("/dashboard")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/dashboard")}`}>Dashboard</button>
-              <button onClick={() => go("/focus")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/focus")}`}>Focus Room</button>
-              <button onClick={() => go("/groups")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/groups")}`}>Study Groups</button>
-              <button onClick={() => go("/notes")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/notes")}`}>Notes</button>
-              <button onClick={() => go("/titi-ai")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/titi-ai")}`}>Titi AI</button>
-              <button onClick={() => go("/leaderboard")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/leaderboard")}`}>Leaderboard</button>
-              <button onClick={() => go("/profile")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/profile")}`}>Profile</button>
+            <div className="absolute right-0 mt-3 w-64 glass rounded-3xl p-3 shadow-2xl border border-white/10">
+              <button onClick={() => go("/dashboard")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/dashboard")}`}>
+                Dashboard
+              </button>
+
+              <button onClick={() => go("/focus")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/focus")}`}>
+                Focus Room
+              </button>
+
+              <button onClick={() => go("/groups")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/groups")}`}>
+                Study Groups
+              </button>
+
+              <button onClick={() => go("/notes")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/notes")}`}>
+                Notes
+              </button>
+
+              <button onClick={() => go("/titi-ai")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/titi-ai")}`}>
+                Study Assistant
+              </button>
+
+              <button onClick={() => go("/leaderboard")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/leaderboard")}`}>
+                Leaderboard
+              </button>
+
+              <button onClick={() => go("/profile")} className={`w-full text-left px-4 py-3 rounded-2xl ${item("/profile")}`}>
+                Profile
+              </button>
             </div>
           )}
         </div>

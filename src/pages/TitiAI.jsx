@@ -1,228 +1,188 @@
 import { useState } from "react"
 import { motion } from "framer-motion"
+import * as pdfjsLib from "pdfjs-dist"
+import pdfWorker from "pdfjs-dist/build/pdf.worker?url"
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker
 
 export default function TitiAI() {
-  const [messages, setMessages] = useState([
-    {
-      role: "ai",
-      text: "Yo, I’m Titi 👋 I’m your AI study friend. Ask me doubts, tell me your topic, or paste notes and I’ll help you revise.",
-    },
-  ])
-
-  const [input, setInput] = useState("")
   const [topic, setTopic] = useState("")
   const [hours, setHours] = useState("")
   const [days, setDays] = useState("")
   const [notesText, setNotesText] = useState("")
-  const [summary, setSummary] = useState("")
+  const [output, setOutput] = useState("")
   const [loading, setLoading] = useState(false)
-  const [outputLoading, setOutputLoading] = useState(false)
+  const [fileName, setFileName] = useState("")
 
-  const askTiti = async (newMessages) => {
-    const res = await fetch("/api/titi", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ messages: newMessages }),
-    })
+  const generatePlan = () => {
+    if (!topic.trim()) return
 
-    const data = await res.json()
+    const d = Number(days) || 3
+    const h = Number(hours) || 2
 
-    if (!res.ok) {
-      throw new Error(data.error || "Titi AI failed")
+    let plan = `Study Plan for ${topic}\n\n`
+    plan += `Duration: ${d} day(s)\nDaily Study Time: ${h} hour(s)\n\n`
+
+    for (let i = 1; i <= d; i++) {
+      plan += `Day ${i}:\n`
+
+      if (i === 1) {
+        plan += `- Understand the basics of ${topic}\n- Make short notes\n- Learn definitions and key points\n`
+      } else if (i === d) {
+        plan += `- Revise everything\n- Practice questions\n- Test yourself using active recall\n- Review weak points\n`
+      } else {
+        plan += `- Revise previous concepts\n- Study the next subtopics\n- Make flashcards\n- Practice examples/questions\n`
+      }
+
+      plan += `\n`
     }
 
-    return data.reply
+    plan += `Daily Routine:\n- Study in 25-30 minute focus blocks\n- Take 5 minute breaks\n- End with 10 minutes quick revision\n`
+
+    setOutput(plan)
   }
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return
+  const summarizeText = () => {
+    if (!notesText.trim()) return
 
-    const userMsg = { role: "user", text: input.trim() }
-    const newMessages = [...messages, userMsg]
+    const clean = notesText.replace(/\s+/g, " ").trim()
 
-    setMessages(newMessages)
-    setInput("")
+    const sentences = clean
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 25)
+
+    const keywords = extractKeywords(clean)
+
+    const summary = sentences.slice(0, 7).join(" ")
+
+    setOutput(`Summary
+
+${summary || clean.slice(0, 800)}
+
+Key Points:
+${sentences.slice(0, 8).map((s) => `- ${s}`).join("\n")}
+
+Important Keywords:
+${keywords.map((k) => `- ${k}`).join("\n")}
+
+Quick Revision:
+- Read the summary once.
+- Cover the notes and recall the key points.
+- Revise keywords and weak areas again.`)
+  }
+
+  const makeFlashcards = () => {
+    if (!notesText.trim()) return
+
+    const clean = notesText.replace(/\s+/g, " ").trim()
+
+    const sentences = clean
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 30)
+
+    const cards = sentences.slice(0, 10).map((s, i) => {
+      return `Q${i + 1}: What is the main idea of this point?\nA${i + 1}: ${s}`
+    })
+
+    setOutput(`Flashcards\n\n${cards.join("\n\n")}`)
+  }
+
+  const extractKeywords = (text) => {
+    const stopWords = new Set([
+      "the", "is", "are", "and", "or", "to", "of", "in", "on", "for", "with",
+      "as", "by", "an", "a", "this", "that", "from", "it", "be", "can", "has",
+      "have", "was", "were", "which", "their", "they", "into", "also"
+    ])
+
+    const words = text
+      .toLowerCase()
+      .replace(/[^a-zA-Z ]/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 4 && !stopWords.has(w))
+
+    const freq = {}
+
+    words.forEach((w) => {
+      freq[w] = (freq[w] || 0) + 1
+    })
+
+    return Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([word]) => word)
+  }
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
     setLoading(true)
+    setFileName(file.name)
 
     try {
-      const reply = await askTiti(newMessages)
-      setMessages((prev) => [...prev, { role: "ai", text: reply }])
+      if (file.type === "text/plain") {
+        const text = await file.text()
+        setNotesText(text)
+        setOutput(`Uploaded ${file.name}. Click Summarize or Flashcards.`)
+      } else if (file.type === "application/pdf") {
+        const arrayBuffer = await file.arrayBuffer()
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+
+        let text = ""
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i)
+          const content = await page.getTextContent()
+          const pageText = content.items.map((item) => item.str).join(" ")
+          text += pageText + "\n\n"
+        }
+
+        setNotesText(text)
+        setOutput(`Uploaded ${file.name}. Extracted text from ${pdf.numPages} page(s). Click Summarize or Flashcards.`)
+      } else {
+        setOutput("Only PDF and TXT files are supported right now.")
+      }
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "ai",
-          text: `Titi AI error: ${err.message}`,
-        },
-      ])
+      setOutput(`Could not read file: ${err.message}`)
     }
 
     setLoading(false)
   }
 
-  const generatePlan = async () => {
-    if (!topic.trim() || outputLoading) return
-
-    setOutputLoading(true)
-
-    const prompt = `Make a practical study plan for this topic: ${topic}.
-Days available: ${days || 3}.
-Hours per day: ${hours || 2}.
-Make it student-friendly with daily tasks, revision, and practice.`
-
-    try {
-      const reply = await askTiti([{ role: "user", text: prompt }])
-      setSummary(reply)
-    } catch (err) {
-      setSummary(`Titi AI error: ${err.message}`)
-    }
-
-    setOutputLoading(false)
-  }
-
-  const summarizeNotes = async () => {
-    if (!notesText.trim() || outputLoading) return
-
-    setOutputLoading(true)
-
-    const prompt = `Summarize these notes into clean study notes.
-Use headings, key points, and quick revision points:
-
-${notesText}`
-
-    try {
-      const reply = await askTiti([{ role: "user", text: prompt }])
-      setSummary(reply)
-    } catch (err) {
-      setSummary(`Titi AI error: ${err.message}`)
-    }
-
-    setOutputLoading(false)
-  }
-
-  const makeFlashcards = async () => {
-    if (!notesText.trim() || outputLoading) return
-
-    setOutputLoading(true)
-
-    const prompt = `Turn these notes into flashcards.
-Format exactly like:
-Q: question
-A: answer
-
-Notes:
-${notesText}`
-
-    try {
-      const reply = await askTiti([{ role: "user", text: prompt }])
-      setSummary(reply)
-    } catch (err) {
-      setSummary(`Titi AI error: ${err.message}`)
-    }
-
-    setOutputLoading(false)
-  }
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
-    if (file.type === "text/plain") {
-      const reader = new FileReader()
-      reader.onload = () => setNotesText(reader.result)
-      reader.readAsText(file)
-      return
-    }
-
-    setSummary(`PDF uploaded: ${file.name}
-
-PDF reading is not connected yet. For now, copy-paste the PDF text into the notes box and Titi will summarize it.`)
-  }
-
   return (
     <div className="space-y-8">
       <section className="relative overflow-hidden glass rounded-[32px] p-8 md:p-12">
-        <div className="absolute -top-32 right-10 h-80 w-80 rounded-full bg-pink-500/25 blur-3xl" />
+        <div className="absolute -top-32 right-10 h-80 w-80 rounded-full bg-emerald-500/25 blur-3xl" />
         <div className="absolute bottom-0 left-10 h-80 w-80 rounded-full bg-blue-500/20 blur-3xl" />
 
         <div className="relative">
-          <p className="text-pink-300 font-bold uppercase text-sm">Titi AI</p>
+          <p className="text-emerald-300 font-bold uppercase text-sm">
+            Study Assistant
+          </p>
           <h1 className="text-4xl md:text-6xl font-black mt-3">
-            Your real AI study friend
+            Plan, summarize, revise.
           </h1>
           <p className="text-gray-300 mt-4 max-w-2xl">
-            Chat naturally, ask follow-ups, generate study plans, summarize notes, and make flashcards.
+            Generate study plans, upload PDFs, summarize notes, and create flashcards instantly.
           </p>
         </div>
       </section>
 
-      <section className="grid xl:grid-cols-[1fr_420px] gap-6">
-        <div className="glass rounded-[32px] p-5 md:p-6 min-h-[650px] flex flex-col">
-          <div className="flex-1 space-y-4 overflow-y-auto pr-2">
-            {messages.map((msg, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex ${
-                  msg.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-[28px] p-4 border ${
-                    msg.role === "user"
-                      ? "bg-blue-500/25 border-blue-400/30"
-                      : "bg-white/10 border-white/10"
-                  }`}
-                >
-                  <p className="text-sm text-gray-400 mb-1">
-                    {msg.role === "user" ? "You" : "Titi"}
-                  </p>
-                  <p className="whitespace-pre-wrap text-gray-100">
-                    {msg.text}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-
-            {loading && (
-              <div className="flex justify-start">
-                <div className="rounded-[28px] p-4 border bg-white/10 border-white/10">
-                  <p className="text-gray-300">Titi is thinking...</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-5 flex gap-3">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-              placeholder="Ask Titi anything..."
-              className="flex-1"
-            />
-
-            <button
-              onClick={sendMessage}
-              disabled={loading}
-              className="btn bg-gradient-to-r from-blue-500 to-purple-500 text-white"
-            >
-              {loading ? "..." : "Send"}
-            </button>
-          </div>
-        </div>
-
+      <section className="grid xl:grid-cols-[420px_1fr] gap-6">
         <aside className="space-y-5">
-          <div className="card">
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="card"
+          >
             <p className="text-gray-400">Study Plan Generator</p>
 
             <input
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="Topic"
+              placeholder="Topic e.g. Photosynthesis"
               className="w-full mt-4"
             />
 
@@ -243,37 +203,43 @@ PDF reading is not connected yet. For now, copy-paste the PDF text into the note
 
             <button
               onClick={generatePlan}
-              disabled={outputLoading}
-              className="btn w-full mt-4 bg-pink-500/20 text-pink-200"
+              className="btn w-full mt-4 bg-emerald-500/20 text-emerald-200"
             >
-              {outputLoading ? "Generating..." : "Generate Plan"}
+              Generate Plan
             </button>
-          </div>
+          </motion.div>
 
-          <div className="card">
-            <p className="text-gray-400">Notes / TXT Upload</p>
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="card"
+          >
+            <p className="text-gray-400">Upload Notes</p>
+
+            <label className="mt-4 flex cursor-pointer items-center justify-center rounded-3xl border border-dashed border-white/20 bg-white/10 p-6 text-center hover:bg-white/15">
+              <input
+                type="file"
+                accept=".pdf,.txt"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <span className="text-gray-300">
+                {fileName ? fileName : "Upload PDF or TXT"}
+              </span>
+            </label>
 
             <textarea
               value={notesText}
               onChange={(e) => setNotesText(e.target.value)}
-              placeholder="Paste notes here..."
-              className="w-full min-h-[180px] mt-4 resize-none rounded-[24px] bg-white/10 border border-white/10 p-4 text-white outline-none"
+              placeholder="Or paste your notes here..."
+              className="w-full min-h-[220px] mt-4 resize-none rounded-[24px] bg-white/10 border border-white/10 p-4 text-white outline-none"
             />
-
-            <label className="mt-4 flex cursor-pointer items-center justify-center rounded-3xl border border-dashed border-white/20 bg-white/10 p-5 text-center hover:bg-white/15">
-              <input
-                type="file"
-                accept=".txt,.pdf"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <span className="text-gray-300">Upload TXT/PDF</span>
-            </label>
 
             <div className="grid grid-cols-2 gap-3 mt-4">
               <button
-                onClick={summarizeNotes}
-                disabled={outputLoading}
+                onClick={summarizeText}
+                disabled={loading}
                 className="btn bg-white/10 text-white"
               >
                 Summarize
@@ -281,40 +247,45 @@ PDF reading is not connected yet. For now, copy-paste the PDF text into the note
 
               <button
                 onClick={makeFlashcards}
-                disabled={outputLoading}
-                className="btn bg-emerald-500/20 text-emerald-200"
+                disabled={loading}
+                className="btn bg-blue-500/20 text-blue-200"
               >
                 Flashcards
               </button>
             </div>
-          </div>
+          </motion.div>
         </aside>
-      </section>
 
-      <section className="glass rounded-[32px] p-6 md:p-8">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <p className="text-pink-300 font-semibold">Output</p>
-            <h2 className="text-3xl font-black mt-1">Generated Study Help</h2>
+        <section className="glass rounded-[32px] p-6 md:p-8 min-h-[720px]">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-emerald-300 font-semibold">Output</p>
+              <h2 className="text-3xl font-black mt-1">Generated Study Material</h2>
+            </div>
+
+            <button
+              onClick={() => setOutput("")}
+              className="btn bg-red-500/15 text-red-300"
+            >
+              Clear
+            </button>
           </div>
 
-          <button
-            onClick={() => setSummary("")}
-            className="btn bg-red-500/15 text-red-300"
-          >
-            Clear
-          </button>
-        </div>
-
-        <div className="mt-6 min-h-[260px] rounded-[28px] bg-white/10 border border-white/10 p-5">
-          {outputLoading ? (
-            <p className="text-gray-300">Titi is generating...</p>
-          ) : summary ? (
-            <p className="whitespace-pre-wrap text-gray-100">{summary}</p>
-          ) : (
-            <p className="text-gray-400">Output appears here.</p>
-          )}
-        </div>
+          <div className="mt-6 min-h-[600px] rounded-[28px] bg-white/10 border border-white/10 p-5 overflow-y-auto">
+            {loading ? (
+              <p className="text-gray-300">Reading file...</p>
+            ) : output ? (
+              <p className="whitespace-pre-wrap text-gray-100 leading-relaxed">
+                {output}
+              </p>
+            ) : (
+              <div className="text-gray-400 space-y-3">
+                <p>Upload notes or generate a plan to see output here.</p>
+                <p>Supported: PDF, TXT, pasted notes.</p>
+              </div>
+            )}
+          </div>
+        </section>
       </section>
     </div>
   )
