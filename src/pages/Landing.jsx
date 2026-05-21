@@ -75,7 +75,7 @@ export default function Home() {
               className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm text-blue-200"
             >
               <Sparkles size={16} />
-              Premium productivity for students
+              FocusFlow
             </motion.div>
 
             <motion.h1
