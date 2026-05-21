@@ -42,6 +42,32 @@ export default function TitiAI() {
     setOutput(plan)
   }
 
+  const extractKeywords = (text) => {
+    const stopWords = new Set([
+      "the", "is", "are", "and", "or", "to", "of", "in", "on", "for", "with",
+      "as", "by", "an", "a", "this", "that", "from", "it", "be", "can", "has",
+      "have", "was", "were", "which", "their", "they", "into", "also", "using",
+      "based", "during", "under", "made", "about", "between", "through"
+    ])
+
+    const words = text
+      .toLowerCase()
+      .replace(/[^a-zA-Z ]/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 4 && !stopWords.has(w))
+
+    const freq = {}
+
+    words.forEach((w) => {
+      freq[w] = (freq[w] || 0) + 1
+    })
+
+    return Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([word]) => word)
+  }
+
   const summarizeText = () => {
     if (!notesText.trim()) return
 
@@ -77,41 +103,128 @@ Quick Revision:
 
     const clean = notesText.replace(/\s+/g, " ").trim()
 
+    const badWords = [
+      "declaration",
+      "certificate",
+      "project guide",
+      "date:",
+      "undersigned",
+      "solemnly declare",
+      "acknowledgement",
+      "table of contents",
+      "index",
+      "signature",
+      "submitted by",
+      "submitted to",
+      "department",
+      "college",
+      "university",
+    ]
+
     const sentences = clean
       .split(/(?<=[.!?])\s+/)
       .map((s) => s.trim())
-      .filter((s) => s.length > 30)
+      .filter((s) => {
+        const lower = s.toLowerCase()
+        return (
+          s.length > 50 &&
+          s.length < 350 &&
+          !badWords.some((word) => lower.includes(word))
+        )
+      })
 
-    const cards = sentences.slice(0, 10).map((s, i) => {
-      return `Q${i + 1}: What is the main idea of this point?\nA${i + 1}: ${s}`
+    const makeQuestion = (text, index) => {
+      const lower = text.toLowerCase()
+
+      if (lower.includes("photosynthesis")) {
+        return "What is photosynthesis?"
+      }
+
+      if (lower.includes("chlorophyll")) {
+        return "What is the role of chlorophyll?"
+      }
+
+      if (lower.includes("carbon dioxide") || lower.includes("water")) {
+        return "What raw materials are needed in this process?"
+      }
+
+      if (lower.includes("oxygen")) {
+        return "Why is oxygen important in this topic?"
+      }
+
+      if (lower.includes("glucose")) {
+        return "What is glucose used for?"
+      }
+
+      if (lower.includes("advantage") || lower.includes("benefit")) {
+        return "What advantage is mentioned here?"
+      }
+
+      if (lower.includes("problem") || lower.includes("issue")) {
+        return "What problem is being discussed?"
+      }
+
+      if (lower.includes("system")) {
+        return "What does this system do?"
+      }
+
+      if (lower.includes("process")) {
+        return "How does this process work?"
+      }
+
+      if (lower.includes("important") || lower.includes("significant")) {
+        return "Why is this point important?"
+      }
+
+      if (lower.includes("application") || lower.includes("used")) {
+        return "Where is this concept applied?"
+      }
+
+      if (lower.includes("component") || lower.includes("module")) {
+        return "What component or module is explained here?"
+      }
+
+      if (lower.includes("result") || lower.includes("conclusion")) {
+        return "What result or conclusion is given?"
+      }
+
+      const starters = [
+        "What is the main concept explained here?",
+        "Why is this point useful for revision?",
+        "What should you remember from this point?",
+        "How would you explain this in simple words?",
+        "What key detail is mentioned in this section?",
+        "What does this part tell us?",
+      ]
+
+      return starters[index % starters.length]
+    }
+
+    const usedQuestions = new Set()
+
+    const cards = sentences.slice(0, 12).map((s, i) => {
+      let question = makeQuestion(s, i)
+
+      if (usedQuestions.has(question)) {
+        question = `What is key point ${i + 1} from the notes?`
+      }
+
+      usedQuestions.add(question)
+
+      const answer = s.length > 230 ? s.slice(0, 230) + "..." : s
+
+      return `Q${i + 1}: ${question}
+A${i + 1}: ${answer}`
     })
+
+    if (!cards.length) {
+      setOutput(
+        "Could not find enough useful study content. Try uploading theory/content pages instead of certificate/declaration pages."
+      )
+      return
+    }
 
     setOutput(`Flashcards\n\n${cards.join("\n\n")}`)
-  }
-
-  const extractKeywords = (text) => {
-    const stopWords = new Set([
-      "the", "is", "are", "and", "or", "to", "of", "in", "on", "for", "with",
-      "as", "by", "an", "a", "this", "that", "from", "it", "be", "can", "has",
-      "have", "was", "were", "which", "their", "they", "into", "also"
-    ])
-
-    const words = text
-      .toLowerCase()
-      .replace(/[^a-zA-Z ]/g, "")
-      .split(/\s+/)
-      .filter((w) => w.length > 4 && !stopWords.has(w))
-
-    const freq = {}
-
-    words.forEach((w) => {
-      freq[w] = (freq[w] || 0) + 1
-    })
-
-    return Object.entries(freq)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([word]) => word)
   }
 
   const handleFileUpload = async (e) => {
@@ -140,7 +253,9 @@ Quick Revision:
         }
 
         setNotesText(text)
-        setOutput(`Uploaded ${file.name}. Extracted text from ${pdf.numPages} page(s). Click Summarize or Flashcards.`)
+        setOutput(
+          `Uploaded ${file.name}. Extracted text from ${pdf.numPages} page(s). Click Summarize or Flashcards.`
+        )
       } else {
         setOutput("Only PDF and TXT files are supported right now.")
       }
@@ -260,7 +375,9 @@ Quick Revision:
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <p className="text-emerald-300 font-semibold">Output</p>
-              <h2 className="text-3xl font-black mt-1">Generated Study Material</h2>
+              <h2 className="text-3xl font-black mt-1">
+                Generated Study Material
+              </h2>
             </div>
 
             <button
