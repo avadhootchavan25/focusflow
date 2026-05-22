@@ -1,146 +1,139 @@
 import { useEffect, useState } from "react"
-import { useParams, useNavigate } from "react-router-dom"
-import { db, auth } from "../firebase"
+import { useParams } from "react-router-dom"
+import { auth, db } from "../firebase"
 import {
-  collection,
   addDoc,
-  query,
-  orderBy,
+  collection,
   onSnapshot,
+  orderBy,
+  query,
   serverTimestamp,
-  getDocs,
-  doc,
-  getDoc,
 } from "firebase/firestore"
-import { addXP } from "../utils/xp"
+import { Send } from "lucide-react"
+import toast from "react-hot-toast"
 
 export default function RoomChat() {
   const { roomId } = useParams()
-  const navigate = useNavigate()
-
+  const [message, setMessage] = useState("")
   const [messages, setMessages] = useState([])
-  const [text, setText] = useState("")
-  const [users, setUsers] = useState({})
-  const [room, setRoom] = useState(null)
 
-  const uid = auth.currentUser?.uid
+  const username =
+    localStorage.getItem("focusflow_username") ||
+    auth.currentUser?.displayName ||
+    auth.currentUser?.email?.split("@")[0] ||
+    "Student"
 
-  useEffect(() => {
-    const loadUsers = async () => {
-      const snap = await getDocs(collection(db, "users"))
-      const map = {}
-      snap.forEach((d) => (map[d.id] = d.data()))
-      setUsers(map)
-    }
-    loadUsers()
-  }, [])
+  const avatar = localStorage.getItem("focusflow_avatar") || "🧠"
 
   useEffect(() => {
-    if (!roomId) return
-
-    const loadRoom = async () => {
-      const snap = await getDoc(doc(db, "rooms", roomId))
-      if (snap.exists()) setRoom({ id: snap.id, ...snap.data() })
-    }
-
-    loadRoom()
-  }, [roomId])
-
-  useEffect(() => {
-    if (!roomId) return
-
     const q = query(
       collection(db, "rooms", roomId, "messages"),
-      orderBy("createdAt")
+      orderBy("createdAt", "asc")
     )
 
-    return onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    const unsub = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+
+      setMessages(data)
     })
+
+    return () => unsub()
   }, [roomId])
 
-  const sendMessage = async () => {
-    if (!uid || !text.trim()) return
+  const sendMessage = async (e) => {
+    e.preventDefault()
 
-    await addDoc(collection(db, "rooms", roomId, "messages"), {
-      text,
-      uid,
-      createdAt: serverTimestamp(),
-    })
+    if (!message.trim()) return
 
-    addXP(5)
-    setText("")
+    try {
+      await addDoc(collection(db, "rooms", roomId, "messages"), {
+        text: message.trim(),
+        username,
+        avatar,
+        userId: auth.currentUser?.uid || "guest",
+        createdAt: serverTimestamp(),
+      })
+
+      setMessage("")
+    } catch (err) {
+      toast.error(err.message)
+    }
   }
 
   return (
     <div className="space-y-6">
-      <section className="glass rounded-[32px] p-6 md:p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <p className="text-blue-300 font-bold uppercase text-sm">Live Study Room</p>
-          <h1 className="text-3xl md:text-5xl font-black mt-2">
-            {room?.name || "Room Chat"}
-          </h1>
-          <p className="text-gray-400 mt-2">
-            Chat, study, and earn XP together.
-          </p>
-        </div>
-
-        <div className="flex gap-3">
-          <button onClick={() => navigate("/groups")} className="btn bg-white/10">
-            All Rooms
-          </button>
-          <button onClick={() => navigate("/groups")} className="btn bg-gradient-to-r from-blue-500 to-purple-500 text-white">
-            New Room
-          </button>
-        </div>
+      <section className="glass rounded-[32px] p-6 md:p-8">
+        <p className="text-purple-300 font-bold uppercase text-sm">
+          Study Room
+        </p>
+        <h1 className="text-4xl font-black mt-2">
+          {roomId.replaceAll("-", " ")}
+        </h1>
+        <p className="text-gray-400 mt-2">
+          Live group chat for this study room.
+        </p>
       </section>
 
-      <section className="glass rounded-[32px] overflow-hidden h-[650px] flex flex-col max-w-5xl mx-auto">
-        <div className="flex-1 p-5 md:p-8 space-y-4 overflow-y-auto">
-          {messages.length === 0 && (
-            <div className="h-full flex items-center justify-center text-center">
-              <div>
-                <h2 className="text-2xl font-black">No messages yet</h2>
-                <p className="text-gray-400 mt-2">Start the conversation.</p>
-              </div>
+      <section className="glass rounded-[32px] p-5 min-h-[560px] flex flex-col">
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+          {messages.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-gray-400 text-center">
+              No messages yet. Start the discussion.
             </div>
-          )}
+          ) : (
+            messages.map((msg) => {
+              const isMe = msg.userId === auth.currentUser?.uid
 
-          {messages.map((msg) => {
-            const isMe = msg.uid === uid
-
-            return (
-              <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+              return (
                 <div
-                  className={`max-w-[78%] md:max-w-[62%] rounded-3xl px-5 py-4 ${
-                    isMe
-                      ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-br-md"
-                      : "bg-white/10 border border-white/10 rounded-bl-md"
-                  }`}
+                  key={msg.id}
+                  className={`flex gap-3 ${isMe ? "justify-end" : "justify-start"}`}
                 >
-                  <p className="text-xs text-gray-300 mb-1">
-                    {isMe ? "You" : users[msg.uid]?.username || "Student"}
-                  </p>
-                  <p className="leading-relaxed">{msg.text}</p>
+                  {!isMe && (
+                    <div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center text-xl">
+                      {msg.avatar || "🧠"}
+                    </div>
+                  )}
+
+                  <div
+                    className={`max-w-[75%] rounded-[24px] p-4 ${
+                      isMe
+                        ? "bg-blue-500/30 border border-blue-300/20"
+                        : "bg-white/10 border border-white/10"
+                    }`}
+                  >
+                    <p className="text-xs text-gray-400 mb-1">
+                      {msg.username || "Student"}
+                    </p>
+                    <p className="text-white">{msg.text}</p>
+                  </div>
+
+                  {isMe && (
+                    <div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center text-xl">
+                      {msg.avatar || avatar}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )
-          })}
+              )
+            })
+          )}
         </div>
 
-        <div className="p-4 md:p-5 border-t border-white/10 flex gap-3 bg-black/20">
+        <form onSubmit={sendMessage} className="mt-5 flex gap-3">
           <input
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Type your message..."
             className="flex-1"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            placeholder="Write a message..."
           />
 
-          <button onClick={sendMessage} className="btn bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6">
-            Send
+          <button className="btn bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+            <Send size={18} /> Send
           </button>
-        </div>
+        </form>
       </section>
     </div>
   )

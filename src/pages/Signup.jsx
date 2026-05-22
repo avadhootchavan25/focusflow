@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth"
-import { auth } from "../firebase"
+import { doc, setDoc } from "firebase/firestore"
+import { auth, db } from "../firebase"
 import { useNavigate, Link } from "react-router-dom"
 import toast from "react-hot-toast"
 
@@ -29,12 +30,34 @@ export default function Signup() {
         password
       )
 
-      await updateProfile(userCredential.user, {
+      const user = userCredential.user
+
+      await updateProfile(user, {
         displayName: username.trim(),
       })
 
       localStorage.setItem("focusflow_username", username.trim())
       localStorage.setItem("focusflow_avatar", "🧠")
+      localStorage.setItem("focusflow_xp", "0")
+      localStorage.setItem("focusflow_focus_minutes", "0")
+      localStorage.setItem("focusflow_sessions", "0")
+      localStorage.setItem("focusflow_streak", "0")
+
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          username: username.trim(),
+          email: user.email,
+          avatar: "🧠",
+          xp: 0,
+          focusMinutes: 0,
+          sessions: 0,
+          streak: 0,
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+        },
+        { merge: true }
+      )
 
       toast.success("Account created")
       navigate("/dashboard")

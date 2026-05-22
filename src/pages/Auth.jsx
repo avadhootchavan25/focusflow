@@ -1,264 +1,118 @@
 import { useState } from "react"
+import { signInWithEmailAndPassword } from "firebase/auth"
+import { doc, setDoc } from "firebase/firestore"
 import { auth, db } from "../firebase"
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  GoogleAuthProvider,
-  signInWithPopup,
-  sendPasswordResetEmail,
-} from "firebase/auth"
-import { doc, setDoc, getDoc } from "firebase/firestore"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, Link } from "react-router-dom"
+import toast from "react-hot-toast"
 
 export default function Auth() {
-  const [mode, setMode] = useState("login")
+  const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [username, setUsername] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState("")
-  const [message, setMessage] = useState("")
-  const navigate = useNavigate()
+  const [loading, setLoading] = useState(false)
 
-  const cleanEmail = email.trim().toLowerCase()
+  const handleLogin = async (e) => {
+    e.preventDefault()
 
-  const friendlyError = (err) => {
-    if (err.code === "auth/invalid-credential") {
-      return "Invalid login. If you signed up with Google, use Continue with Google. Otherwise reset your password."
-    }
-
-    if (err.code === "auth/email-already-in-use") {
-      return "This email already has an account. Try Login or Continue with Google."
-    }
-
-    if (err.code === "auth/weak-password") {
-      return "Password should be at least 6 characters."
-    }
-
-    if (err.code === "auth/invalid-email") {
-      return "Enter a valid email address."
-    }
-
-    if (err.code === "auth/missing-password") {
-      return "Enter your password."
-    }
-
-    if (err.code === "auth/popup-closed-by-user") {
-      return "Google sign-in was closed before finishing."
-    }
-
-    return err.message
-  }
-
-  const saveUser = async (user, name) => {
-    const ref = doc(db, "users", user.uid)
-    const snap = await getDoc(ref)
-
-    if (!snap.exists()) {
-      await setDoc(ref, {
-        uid: user.uid,
-        email: user.email,
-        username: name || user.email?.split("@")[0] || "Student",
-        xp: 0,
-        level: 1,
-        sessions: 0,
-        streak: 0,
-        dailyFocusMinutes: 0,
-        totalFocusMinutes: 0,
-        createdAt: new Date(),
-      })
-    }
-  }
-
-  const handleEmailAuth = async () => {
-    setError("")
-    setMessage("")
-
-    if (!cleanEmail) {
-      setError("Enter your email.")
-      return
-    }
-
-    if (!password) {
-      setError("Enter your password.")
+    if (!email.trim() || !password.trim()) {
+      toast.error("Fill all fields")
       return
     }
 
     try {
-      if (mode === "signup") {
-        if (!username.trim()) {
-          setError("Enter a username.")
-          return
-        }
+      setLoading(true)
 
-        const res = await createUserWithEmailAndPassword(
-          auth,
-          cleanEmail,
-          password
-        )
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      )
 
-        await saveUser(res.user, username.trim())
-      } else {
-        const res = await signInWithEmailAndPassword(
-          auth,
-          cleanEmail,
-          password
-        )
+      const user = userCredential.user
+      const username =
+        user.displayName || user.email?.split("@")[0] || "Student"
 
-        await saveUser(res.user)
-      }
+      localStorage.setItem("focusflow_username", username)
+      localStorage.setItem("focusflow_avatar", "🧠")
 
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          username,
+          email: user.email,
+          avatar: localStorage.getItem("focusflow_avatar") || "🧠",
+          xp: Number(localStorage.getItem("focusflow_xp")) || 0,
+          focusMinutes:
+            Number(localStorage.getItem("focusflow_focus_minutes")) || 0,
+          sessions: Number(localStorage.getItem("focusflow_sessions")) || 0,
+          streak: Number(localStorage.getItem("focusflow_streak")) || 0,
+          lastLogin: new Date().toISOString(),
+        },
+        { merge: true }
+      )
+
+      toast.success("Logged in")
       navigate("/dashboard")
     } catch (err) {
-      setError(friendlyError(err))
-    }
-  }
-
-  const handleGoogle = async () => {
-    setError("")
-    setMessage("")
-
-    try {
-      const provider = new GoogleAuthProvider()
-      const res = await signInWithPopup(auth, provider)
-      await saveUser(res.user)
-      navigate("/dashboard")
-    } catch (err) {
-      setError(friendlyError(err))
-    }
-  }
-
-  const resetPassword = async () => {
-    setError("")
-    setMessage("")
-
-    if (!cleanEmail) {
-      setError("Enter your email first, then click Forgot password.")
-      return
-    }
-
-    try {
-      await sendPasswordResetEmail(auth, cleanEmail)
-      setMessage("Password reset email sent. Check your inbox.")
-    } catch (err) {
-      setError(friendlyError(err))
+      toast.error(err.message)
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-6">
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 via-purple-600/10 to-emerald-500/10" />
-      <div className="absolute -top-32 left-10 h-80 w-80 rounded-full bg-blue-500/30 blur-3xl" />
-      <div className="absolute bottom-0 right-10 h-80 w-80 rounded-full bg-purple-500/25 blur-3xl" />
+    <div className="min-h-screen bg-[#07070c] text-white flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.25),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.22),transparent_35%)]" />
 
-      <div className="relative z-10 grid lg:grid-cols-2 gap-8 max-w-6xl w-full">
-        <section className="glass rounded-[36px] p-8 md:p-12 flex flex-col justify-center">
-          <p className="text-blue-300 font-bold uppercase text-sm">
-            FocusFlow
-          </p>
-          <h1 className="text-5xl md:text-7xl font-black mt-4 leading-tight">
-            Study smarter with focus rooms.
-          </h1>
-          <p className="text-gray-300 mt-6 text-lg max-w-xl">
-            Join groups, earn XP, complete sessions, and build a consistent study habit.
-          </p>
-        </section>
+      <form
+        onSubmit={handleLogin}
+        className="relative z-10 glass rounded-[36px] p-8 w-full max-w-md"
+      >
+        <p className="text-blue-300 font-bold uppercase text-sm">FocusFlow</p>
+        <h1 className="text-4xl font-black mt-3">Login</h1>
+        <p className="text-gray-400 mt-2">Continue your study flow.</p>
 
-        <section className="glass rounded-[36px] p-8 md:p-10">
-          <p className="text-blue-300 font-semibold">
-            {mode === "login" ? "Welcome back" : "Create account"}
-          </p>
+        <input
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+          type="email"
+          className="w-full mt-6"
+        />
 
-          <h2 className="text-4xl font-black mt-2">
-            {mode === "login" ? "Login" : "Sign up"}
-          </h2>
+        <div className="relative mt-4">
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            type={showPassword ? "text" : "password"}
+            className="w-full pr-20"
+          />
 
-          <div className="mt-8 space-y-4">
-            {mode === "signup" && (
-              <input
-                className="w-full"
-                placeholder="Username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            )}
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-blue-300"
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
 
-            <input
-              className="w-full"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+        <button
+          disabled={loading}
+          className="btn w-full mt-6 bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+        >
+          {loading ? "Logging in..." : "Login"}
+        </button>
 
-            <div className="relative">
-              <input
-                className="w-full pr-24"
-                placeholder="Password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleEmailAuth()}
-              />
-
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-blue-300 hover:text-white"
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
-            </div>
-
-            {mode === "login" && (
-              <button
-                onClick={resetPassword}
-                className="text-sm text-blue-300 hover:text-white"
-              >
-                Forgot password?
-              </button>
-            )}
-
-            {error && (
-              <p className="text-red-300 text-sm bg-red-500/10 border border-red-500/20 rounded-2xl p-3">
-                {error}
-              </p>
-            )}
-
-            {message && (
-              <p className="text-emerald-300 text-sm bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-3">
-                {message}
-              </p>
-            )}
-
-            <button
-              onClick={handleEmailAuth}
-              className="btn w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-4"
-            >
-              {mode === "login" ? "Login" : "Create Account"}
-            </button>
-
-            <button
-              onClick={handleGoogle}
-              className="btn w-full bg-white/10 text-white py-4"
-            >
-              Continue with Google
-            </button>
-
-            <button
-              onClick={() => {
-                setMode(mode === "login" ? "signup" : "login")
-                setError("")
-                setMessage("")
-              }}
-              className="w-full text-gray-300 hover:text-white"
-            >
-              {mode === "login"
-                ? "Need an account? Sign up"
-                : "Already have an account? Login"}
-            </button>
-          </div>
-        </section>
-      </div>
+        <p className="text-gray-400 text-sm mt-5 text-center">
+          Don’t have an account?{" "}
+          <Link to="/signup" className="text-blue-300 font-semibold">
+            Sign up
+          </Link>
+        </p>
+      </form>
     </div>
   )
 }

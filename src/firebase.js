@@ -3,12 +3,12 @@ import { getAuth } from "firebase/auth"
 import { getFirestore } from "firebase/firestore"
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyDYoAABuQjsHOoJlPzV6Nyw2LVQuBRA-2w",
+  authDomain: "focusflow-6759c.firebaseapp.com",
+  projectId: "focusflow-6759c",
+  storageBucket: "focusflow-6759c.firebasestorage.app",
+  messagingSenderId: "30067672214",
+  appId: "1:30067672214:web:0811d5bbd8b316ecf46eb7",
 }
 
 const app = initializeApp(firebaseConfig)
