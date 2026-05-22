@@ -36,21 +36,25 @@ export default function Auth() {
       localStorage.setItem("focusflow_username", username)
       localStorage.setItem("focusflow_avatar", "🧠")
 
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          username,
-          email: user.email,
-          avatar: localStorage.getItem("focusflow_avatar") || "🧠",
-          xp: Number(localStorage.getItem("focusflow_xp")) || 0,
-          focusMinutes:
-            Number(localStorage.getItem("focusflow_focus_minutes")) || 0,
-          sessions: Number(localStorage.getItem("focusflow_sessions")) || 0,
-          streak: Number(localStorage.getItem("focusflow_streak")) || 0,
-          lastLogin: new Date().toISOString(),
-        },
-        { merge: true }
-      )
+      try {
+  await setDoc(
+    doc(db, "users", user.uid),
+    {
+      username,
+      email: user.email,
+      avatar: localStorage.getItem("focusflow_avatar") || "🧠",
+      xp: Number(localStorage.getItem("focusflow_xp")) || 0,
+      focusMinutes:
+        Number(localStorage.getItem("focusflow_focus_minutes")) || 0,
+      sessions: Number(localStorage.getItem("focusflow_sessions")) || 0,
+      streak: Number(localStorage.getItem("focusflow_streak")) || 0,
+      lastLogin: new Date().toISOString(),
+    },
+    { merge: true }
+  )
+} catch (firestoreErr) {
+  console.log("Firestore user save failed:", firestoreErr)
+}
 
       toast.success("Logged in")
       navigate("/dashboard")
