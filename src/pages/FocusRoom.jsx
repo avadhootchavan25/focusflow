@@ -1,225 +1,290 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
-import { addXP, completeFocusSession } from "../utils/xp"
-import { updateStreak } from "../utils/streak"
+import { Play, Pause, RotateCcw, Timer, ShieldAlert } from "lucide-react"
+import { auth, db } from "../firebase"
+import { doc, getDoc, setDoc } from "firebase/firestore"
 
 export default function FocusRoom() {
-  const presets = [
-    { label: "25 min", value: 25 * 60, xp: 25 },
-    { label: "45 min", value: 45 * 60, xp: 45 },
-    { label: "60 min", value: 60 * 60, xp: 60 },
-  ]
-
-  const [selected, setSelected] = useState(presets[0])
-  const [seconds, setSeconds] = useState(presets[0].value)
+  const [customMinutes, setCustomMinutes] = useState(25)
+  const [secondsLeft, setSecondsLeft] = useState(25 * 60)
   const [running, setRunning] = useState(false)
-  const [earnedXP, setEarnedXP] = useState(0)
-  const [sessions, setSessions] = useState(0)
-  const [customMinutes, setCustomMinutes] = useState("")
+  const [paused, setPaused] = useState(false)
+  const [distractions, setDistractions] = useState(0)
+  const [lockMode, setLockMode] = useState(false)
+  const [warning, setWarning] = useState(false)
 
-  useEffect(() => {
-    const warn = (e) => {
-      if (!running) return
-      e.preventDefault()
-      e.returnValue = "Your focus session is still running. Pause before leaving."
+  const intervalRef = useRef(null)
+
+  const minutes = Math.floor(secondsLeft / 60)
+  const seconds = secondsLeft % 60
+  const totalSeconds = Math.max(1, Number(customMinutes) || 25) * 60
+  const progress = 100 - (secondsLeft / totalSeconds) * 100
+
+  const saveProgress = async (mins) => {
+    const completedMins = Number(mins) || Number(customMinutes) || 25
+
+    const oldMinutes = Number(localStorage.getItem("focusflow_focus_minutes")) || 0
+    const oldSessions = Number(localStorage.getItem("focusflow_sessions")) || 0
+    const oldXP = Number(localStorage.getItem("focusflow_xp")) || 0
+    const oldStreak = Number(localStorage.getItem("focusflow_streak")) || 0
+
+    const newMinutes = oldMinutes + completedMins
+    const newSessions = oldSessions + 1
+    const newXP = oldXP + completedMins * 2
+    const newStreak = Math.max(oldStreak, 1)
+
+    localStorage.setItem("focusflow_focus_minutes", String(newMinutes))
+    localStorage.setItem("focusflow_sessions", String(newSessions))
+    localStorage.setItem("focusflow_xp", String(newXP))
+    localStorage.setItem("focusflow_streak", String(newStreak))
+    localStorage.setItem("focusflow_last_session", new Date().toISOString())
+
+    if (auth.currentUser) {
+      const userRef = doc(db, "users", auth.currentUser.uid)
+      const snap = await getDoc(userRef)
+      const oldData = snap.exists() ? snap.data() : {}
+
+      await setDoc(
+        userRef,
+        {
+          username:
+            localStorage.getItem("focusflow_username") ||
+            auth.currentUser.displayName ||
+            auth.currentUser.email?.split("@")[0] ||
+            "Student",
+          avatar: localStorage.getItem("focusflow_avatar") || "🧠",
+          xp: Number(oldData.xp || 0) + completedMins * 2,
+          focusMinutes: Number(oldData.focusMinutes || 0) + completedMins,
+          sessions: Number(oldData.sessions || 0) + 1,
+          streak: Math.max(Number(oldData.streak || 0), 1),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      )
     }
 
-    window.addEventListener("beforeunload", warn)
-    return () => window.removeEventListener("beforeunload", warn)
-  }, [running])
+    window.dispatchEvent(new Event("focusflow-stats-updated"))
+  }
+
+  const enterFullscreen = async () => {
+    try {
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen()
+      }
+    } catch {}
+  }
+
+  const exitFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      }
+    } catch {}
+  }
+
+  const startTimer = async () => {
+    const mins = Math.max(1, Number(customMinutes) || 25)
+    setSecondsLeft(mins * 60)
+    setRunning(true)
+    setPaused(false)
+    setLockMode(true)
+    setWarning(false)
+    await enterFullscreen()
+  }
+
+  const pauseTimer = async () => {
+    setRunning(false)
+    setPaused(true)
+    setLockMode(false)
+    setWarning(false)
+    await exitFullscreen()
+  }
+
+  const resumeTimer = async () => {
+    setRunning(true)
+    setPaused(false)
+    setLockMode(true)
+    setWarning(false)
+    await enterFullscreen()
+  }
+
+  const resetTimer = async () => {
+    setRunning(false)
+    setPaused(false)
+    setLockMode(false)
+    setWarning(false)
+    setDistractions(0)
+    setSecondsLeft((Number(customMinutes) || 25) * 60)
+    await exitFullscreen()
+  }
 
   useEffect(() => {
-    if (!running) return
+    if (running) {
+      intervalRef.current = setInterval(() => {
+        setSecondsLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(intervalRef.current)
 
-    const timer = setInterval(() => {
-      setSeconds((prev) => {
-        if (prev <= 1) {
-          finishSession()
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
+            const completedMins = Math.max(1, Number(customMinutes) || 25)
 
-    return () => clearInterval(timer)
-  }, [running, selected])
+            setRunning(false)
+            setPaused(false)
+            setLockMode(false)
+            setWarning(false)
 
-  const finishSession = async () => {
-    setRunning(false)
+            saveProgress(completedMins)
+            exitFullscreen()
 
-    const minutesCompleted = Math.round(selected.value / 60)
-    await addXP(selected.xp)
-    await completeFocusSession(minutesCompleted)
-    await updateStreak()
+            return 0
+          }
 
-    setEarnedXP((x) => x + selected.xp)
-    setSessions((s) => s + 1)
-  }
-
-  const progress = useMemo(() => {
-    return Math.max(0, Math.min(100, ((selected.value - seconds) / selected.value) * 100))
-  }, [seconds, selected])
-
-  const minutes = Math.floor(seconds / 60)
-  const secs = seconds % 60
-
-  const choosePreset = (preset) => {
-    if (running) return
-    setSelected(preset)
-    setSeconds(preset.value)
-  }
-
-  const applyCustomTimer = () => {
-    if (running) return
-
-    const mins = Number(customMinutes)
-    if (!mins || mins < 1) return
-
-    const custom = {
-      label: `${mins} min`,
-      value: mins * 60,
-      xp: Math.max(5, mins),
+          return prev - 1
+        })
+      }, 1000)
     }
 
-    setSelected(custom)
-    setSeconds(custom.value)
-    setCustomMinutes("")
-  }
+    return () => clearInterval(intervalRef.current)
+  }, [running, customMinutes])
 
-  const resetTimer = () => {
-    setRunning(false)
-    setSeconds(selected.value)
-  }
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (lockMode && document.hidden) {
+        setDistractions((prev) => prev + 1)
+        setWarning(true)
+        setRunning(false)
+        setPaused(true)
+      }
+    }
+
+    const blockLeave = (e) => {
+      if (lockMode) {
+        e.preventDefault()
+        e.returnValue = ""
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility)
+    window.addEventListener("beforeunload", blockLeave)
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility)
+      window.removeEventListener("beforeunload", blockLeave)
+    }
+  }, [lockMode])
 
   return (
-    <div className="relative min-h-[calc(100vh-120px)] overflow-hidden rounded-[32px] p-6 md:p-10">
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 via-purple-600/10 to-emerald-500/10" />
-      <div className="absolute -top-32 left-10 h-72 w-72 rounded-full bg-blue-500/30 blur-3xl" />
-      <div className="absolute bottom-0 right-10 h-80 w-80 rounded-full bg-purple-500/25 blur-3xl" />
+    <div className="space-y-8">
+      {warning && (
+        <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4">
+          <div className="glass rounded-[36px] p-8 max-w-lg text-center">
+            <ShieldAlert className="mx-auto text-red-300" size={52} />
+            <h2 className="text-4xl font-black mt-4">Focus broken</h2>
+            <p className="text-gray-300 mt-3">
+              You switched away from FocusFlow. Timer has been paused.
+            </p>
 
-      <div className="relative z-10 grid xl:grid-cols-[1fr_360px] gap-8">
-        <motion.section
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass rounded-[32px] p-8 md:p-12 min-h-[620px] flex flex-col items-center justify-center text-center"
-        >
-          <p className="text-blue-300 font-bold tracking-wide uppercase text-sm">
-            Premium Focus Mode
-          </p>
+            <button
+              onClick={resumeTimer}
+              className="btn mt-6 bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+            >
+              Resume Focus
+            </button>
+          </div>
+        </div>
+      )}
 
-          <h1 className="text-4xl md:text-6xl font-black mt-3">
-            Lock in your session
-          </h1>
+      <section className="glass rounded-[32px] p-8 md:p-12">
+        <p className="text-blue-300 font-bold uppercase text-sm">Focus Room</p>
+        <h1 className="text-4xl md:text-6xl font-black mt-3">
+          Lock in your session.
+        </h1>
+        <p className="text-gray-300 mt-4">
+          Start a focus timer. If you leave the tab, the timer pauses and counts it as a distraction.
+        </p>
+      </section>
 
-          <p className="text-gray-300 mt-4 max-w-xl">
-            Start a session and stay locked in. Pause before leaving.
-          </p>
-
-          <div className="flex gap-3 mt-8 flex-wrap justify-center">
-            {presets.map((preset) => (
-              <button
-                key={preset.label}
-                onClick={() => choosePreset(preset)}
-                disabled={running}
-                className={`btn px-6 py-3 ${
-                  selected.label === preset.label
-                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
-                    : "bg-white/10 text-white"
-                }`}
-              >
-                {preset.label}
-              </button>
-            ))}
+      <section className="grid lg:grid-cols-[1fr_360px] gap-6">
+        <motion.div className="glass rounded-[36px] p-8 text-center">
+          <div className="mx-auto h-72 w-72 rounded-full border border-white/10 bg-white/10 flex items-center justify-center">
+            <div>
+              <p className="text-gray-400">Time Left</p>
+              <h2 className="text-7xl font-black mt-2">
+                {String(minutes).padStart(2, "0")}:
+                {String(seconds).padStart(2, "0")}
+              </h2>
+              <p className="text-blue-300 mt-3">
+                {lockMode ? "Focus Lock Active" : "Ready"}
+              </p>
+            </div>
           </div>
 
-          <div className="mt-5 flex gap-3 w-full max-w-md">
+          <div className="mt-8 h-4 rounded-full bg-white/10 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+            />
+          </div>
+
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            {!running && !paused && (
+              <button onClick={startTimer} className="btn bg-blue-500 text-white">
+                <Play size={18} /> Start Focus
+              </button>
+            )}
+
+            {running && (
+              <button
+                onClick={pauseTimer}
+                className="btn bg-yellow-500/20 text-yellow-200"
+              >
+                <Pause size={18} /> Pause
+              </button>
+            )}
+
+            {!running && paused && (
+              <button
+                onClick={resumeTimer}
+                className="btn bg-emerald-500/20 text-emerald-200"
+              >
+                <Play size={18} /> Resume
+              </button>
+            )}
+
+            <button onClick={resetTimer} className="btn bg-white/10 text-white">
+              <RotateCcw size={18} /> Reset
+            </button>
+          </div>
+        </motion.div>
+
+        <aside className="space-y-5">
+          <div className="card">
+            <Timer className="text-blue-300" />
+            <h3 className="text-2xl font-black mt-4">Custom Timer</h3>
+
             <input
               type="number"
               min="1"
-              disabled={running}
               value={customMinutes}
-              onChange={(e) => setCustomMinutes(e.target.value)}
-              placeholder="Custom minutes"
-            />
-            <button
               disabled={running}
-              onClick={applyCustomTimer}
-              className="btn bg-white/10 text-white whitespace-nowrap"
-            >
-              Set
-            </button>
-          </div>
-
-          {running && (
-            <p className="mt-5 text-orange-300 font-semibold">
-              Focus lock active. Pause before leaving the site.
-            </p>
-          )}
-
-          <motion.div
-            animate={running ? { scale: [1, 1.03, 1] } : { scale: 1 }}
-            transition={{ repeat: running ? Infinity : 0, duration: 2 }}
-            className="relative mt-10 h-[320px] w-[320px] md:h-[380px] md:w-[380px] rounded-full p-3"
-            style={{
-              background: `conic-gradient(#60a5fa ${progress}%, rgba(255,255,255,0.10) ${progress}%)`,
-            }}
-          >
-            <div className="h-full w-full rounded-full bg-[#070711]/90 border border-white/10 flex items-center justify-center shadow-2xl">
-              <div>
-                <p className="text-gray-400 text-sm">Focus Timer</p>
-                <h2 className="text-6xl md:text-7xl font-black mt-3 tracking-tight">
-                  {String(minutes).padStart(2, "0")}:{String(secs).padStart(2, "0")}
-                </h2>
-                <p className="text-blue-300 mt-4 font-semibold">
-                  {Math.round(progress)}% complete
-                </p>
-              </div>
-            </div>
-          </motion.div>
-
-          <div className="flex gap-4 mt-10 flex-wrap justify-center">
-            <button
-              onClick={() => setRunning(!running)}
-              className="btn px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 text-white"
-            >
-              {running ? "Pause Session" : "Start Session"}
-            </button>
-
-            <button onClick={resetTimer} className="btn px-8 py-4 bg-white/10 text-white">
-              Reset
-            </button>
-          </div>
-        </motion.section>
-
-        <motion.aside
-          initial={{ opacity: 0, x: 18 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="space-y-5"
-        >
-          <div className="card">
-            <p className="text-gray-400">Session Reward</p>
-            <h3 className="text-5xl font-black mt-3">+{selected.xp}</h3>
-            <p className="text-blue-300 mt-2">XP on completion</p>
+              onChange={(e) => {
+                const value = e.target.value
+                setCustomMinutes(value)
+                setSecondsLeft((Number(value) || 25) * 60)
+              }}
+              className="w-full mt-4"
+              placeholder="Minutes"
+            />
           </div>
 
           <div className="card">
-            <p className="text-gray-400">XP Earned Today</p>
-            <h3 className="text-5xl font-black mt-3">{earnedXP}</h3>
-          </div>
-
-          <div className="card">
-            <p className="text-gray-400">Sessions Completed</p>
-            <h3 className="text-5xl font-black mt-3">{sessions}</h3>
-          </div>
-
-          <div className="card">
-            <p className="text-gray-400">Focus Lock</p>
-            <p className="text-xl font-bold mt-3">
-              Leaving is blocked while running.
+            <h3 className="text-2xl font-black">Focus Stats</h3>
+            <p className="text-gray-400 mt-3">Distractions this session</p>
+            <p className="text-5xl font-black text-red-300 mt-2">
+              {distractions}
             </p>
           </div>
-        </motion.aside>
-      </div>
+        </aside>
+      </section>
     </div>
   )
 }

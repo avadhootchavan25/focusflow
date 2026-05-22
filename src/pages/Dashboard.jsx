@@ -19,6 +19,22 @@ export default function Dashboard() {
   const [username, setUsername] = useState("Student")
   const [avatar, setAvatar] = useState("🧠")
 
+  const [studyStats, setStudyStats] = useState({
+    xp: 0,
+    streak: 0,
+    sessions: 0,
+    focusMinutes: 0,
+  })
+
+  const loadStats = () => {
+    setStudyStats({
+      xp: Number(localStorage.getItem("focusflow_xp")) || 0,
+      streak: Number(localStorage.getItem("focusflow_streak")) || 0,
+      sessions: Number(localStorage.getItem("focusflow_sessions")) || 0,
+      focusMinutes: Number(localStorage.getItem("focusflow_focus_minutes")) || 0,
+    })
+  }
+
   useEffect(() => {
     const savedName =
       localStorage.getItem("focusflow_username") ||
@@ -30,30 +46,39 @@ export default function Dashboard() {
 
     setUsername(savedName)
     setAvatar(savedAvatar)
+    loadStats()
+
+    window.addEventListener("focusflow-stats-updated", loadStats)
+    window.addEventListener("storage", loadStats)
+
+    return () => {
+      window.removeEventListener("focusflow-stats-updated", loadStats)
+      window.removeEventListener("storage", loadStats)
+    }
   }, [user])
 
   const stats = [
     {
       label: "Total XP",
-      value: Number(localStorage.getItem("focusflow_xp")) || 0,
+      value: studyStats.xp,
       icon: Trophy,
       color: "text-blue-300",
     },
     {
       label: "Current Streak",
-      value: `${Number(localStorage.getItem("focusflow_streak")) || 0} days`,
+      value: `${studyStats.streak} days`,
       icon: Flame,
       color: "text-orange-300",
     },
     {
       label: "Focus Sessions",
-      value: Number(localStorage.getItem("focusflow_sessions")) || 0,
+      value: studyStats.sessions,
       icon: Timer,
       color: "text-emerald-300",
     },
     {
       label: "Focus Minutes",
-      value: `${Number(localStorage.getItem("focusflow_focus_minutes")) || 0} min`,
+      value: `${studyStats.focusMinutes} min`,
       icon: BookOpen,
       color: "text-pink-300",
     },
@@ -71,7 +96,7 @@ export default function Dashboard() {
       title: "Study Assistant",
       desc: "Generate plans, summarize PDFs, and make flashcards.",
       icon: Sparkles,
-      path: "/titi-ai",
+      path: "/study-assistant",
       color: "from-emerald-500/25 to-blue-500/10",
     },
     {

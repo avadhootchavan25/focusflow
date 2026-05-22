@@ -1,71 +1,322 @@
-import { useState } from "react";
-import { Upload, FileText, Brain, ListChecks, Sparkles } from "lucide-react";
+import { useState } from "react"
+import { motion } from "framer-motion"
+import * as pdfjsLib from "pdfjs-dist"
+import pdfWorker from "pdfjs-dist/build/pdf.worker?url"
+import { FileText, Sparkles, Upload, BookOpen, Copy } from "lucide-react"
+import toast from "react-hot-toast"
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker
 
 export default function AIStudyAssistant() {
-  const [file, setFile] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [output, setOutput] = useState("");
+  const [topic, setTopic] = useState("")
+  const [hours, setHours] = useState("")
+  const [days, setDays] = useState("")
+  const [notesText, setNotesText] = useState("")
+  const [output, setOutput] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [fileName, setFileName] = useState("")
 
-  const handleAIAction = (action) => {
-    setLoading(true);
-    setOutput(`Titi is analyzing your document for ${action}...`);
-    
-    setTimeout(() => {
-      setLoading(false);
-      if (action === "Summary") setOutput("✨ Summary: This document discusses the core principles of Quantum Physics, focusing on wave-particle duality and the Heisenberg Uncertainty Principle. Key takeaway: energy is quantized.");
-      if (action === "Flashcards") setOutput("🗂️ Flashcards Generated:\n1. What is a Photon? -> A particle of light.\n2. Define Planck's constant -> h = 6.626 x 10^-34 J·s.");
-      if (action === "Quiz") setOutput("📝 Quiz Created:\nQ1: Who proposed the uncertainty principle?\nQ2: What is the speed of light in vacuum?");
-    }, 2000);
-  };
+  const badWords = [
+    "declaration",
+    "certificate",
+    "project guide",
+    "date:",
+    "undersigned",
+    "solemnly declare",
+    "acknowledgement",
+    "table of contents",
+    "index",
+    "signature",
+    "submitted by",
+    "submitted to",
+    "department",
+    "college",
+    "university",
+  ]
+
+  const getUsefulSentences = () => {
+    const clean = notesText.replace(/\s+/g, " ").trim()
+
+    return clean
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => {
+        const lower = s.toLowerCase()
+        return (
+          s.length > 35 &&
+          s.length < 450 &&
+          !badWords.some((word) => lower.includes(word))
+        )
+      })
+  }
+
+  const generatePlan = () => {
+    if (!topic.trim()) {
+      toast.error("Enter a topic first")
+      return
+    }
+
+    const d = Number(days) || 3
+    const h = Number(hours) || 2
+
+    let plan = `Study Plan for ${topic}\n\n`
+    plan += `Duration: ${d} day(s)\nDaily Study Time: ${h} hour(s)\n\n`
+
+    for (let i = 1; i <= d; i++) {
+      plan += `Day ${i}:\n`
+
+      if (i === 1) {
+        plan += `- Understand the basics of ${topic}\n- Make short notes\n- Learn definitions and key points\n`
+      } else if (i === d) {
+        plan += `- Revise everything\n- Practice questions\n- Test yourself using active recall\n- Review weak points\n`
+      } else {
+        plan += `- Revise previous concepts\n- Study the next subtopics\n- Make flashcards\n- Practice examples/questions\n`
+      }
+
+      plan += `\n`
+    }
+
+    setOutput(plan)
+  }
+
+  const summarizeText = () => {
+    if (!notesText.trim()) {
+      toast.error("Upload PDF or paste notes first")
+      return
+    }
+
+    const sentences = getUsefulSentences()
+
+    if (!sentences.length) {
+      setOutput("No useful study content found in the uploaded notes/PDF.")
+      return
+    }
+
+    const selected = sentences.slice(0, 12)
+
+    setOutput(`PDF/Notes Summary
+
+${selected.slice(0, 5).join(" ")}
+
+Key Points From Uploaded Content:
+${selected.map((s) => `- ${s}`).join("\n")}
+
+Important Revision Lines:
+${sentences.slice(12, 20).map((s) => `- ${s}`).join("\n") || "- Revise the key points above."}`)
+  }
+
+  const makeFlashcards = () => {
+    if (!notesText.trim()) {
+      toast.error("Upload PDF or paste notes first")
+      return
+    }
+
+    const sentences = getUsefulSentences()
+
+    if (!sentences.length) {
+      setOutput("No useful study content found for flashcards.")
+      return
+    }
+
+    const cards = sentences.slice(0, 12).map((s, i) => {
+      const words = s.split(" ").filter(Boolean)
+      const answer = s.length > 260 ? s.slice(0, 260) + "..." : s
+
+      let question = `What is explained in this part of the uploaded notes?`
+
+      if (words.length > 8) {
+        question = `What does the uploaded PDF say about "${words.slice(0, 5).join(" ")}..."?`
+      }
+
+      return `Q${i + 1}: ${question}
+A${i + 1}: ${answer}`
+    })
+
+    setOutput(`Flashcards From Uploaded PDF/Notes\n\n${cards.join("\n\n")}`)
+  }
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setLoading(true)
+    setFileName(file.name)
+    setOutput("Reading uploaded file...")
+
+    try {
+      if (file.type === "text/plain") {
+        const text = await file.text()
+        setNotesText(text)
+        setOutput(`Uploaded ${file.name}. Now click Summarize or Flashcards.`)
+      } else if (file.type === "application/pdf") {
+        const arrayBuffer = await file.arrayBuffer()
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+
+        let text = ""
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i)
+          const content = await page.getTextContent()
+          const pageText = content.items.map((item) => item.str).join(" ")
+          text += pageText + "\n\n"
+        }
+
+        setNotesText(text)
+
+        if (!text.trim()) {
+          setOutput("PDF uploaded, but no readable text was found. It may be scanned/image-based.")
+        } else {
+          setOutput(
+            `Uploaded ${file.name}. Extracted text from ${pdf.numPages} page(s). Now click Summarize or Flashcards.`
+          )
+        }
+      } else {
+        setOutput("Only PDF and TXT files are supported right now.")
+      }
+    } catch (err) {
+      setOutput(`Could not read file: ${err.message}`)
+    }
+
+    setLoading(false)
+  }
+
+  const copyOutput = async () => {
+    if (!output) return
+    await navigator.clipboard.writeText(output)
+    toast.success("Copied")
+  }
 
   return (
-    <div className="min-h-screen bg-[#050816] text-white p-8 pb-32">
-      <div className="max-w-4xl mx-auto text-center">
-        <h1 className="text-5xl font-black mb-4">Titi <span className="text-blue-500">AI Assistant</span></h1>
-        <p className="text-gray-400 mb-12">Upload your PDFs and let Titi turn them into study gold. 💎</p>
+    <div className="space-y-8">
+      <section className="relative overflow-hidden glass rounded-[32px] p-8 md:p-12">
+        <div className="absolute -top-32 right-10 h-80 w-80 rounded-full bg-emerald-500/25 blur-3xl" />
+        <div className="absolute bottom-0 left-10 h-80 w-80 rounded-full bg-blue-500/20 blur-3xl" />
 
-        {/* Upload Area */}
-        <div className="glass p-12 rounded-[40px] border-2 border-dashed border-blue-500/30 mb-8 flex flex-col items-center justify-center relative group overflow-hidden">
-          <Upload size={60} className="text-blue-500 mb-4 group-hover:scale-110 transition-all" />
-          <input 
-            type="file" 
-            className="absolute inset-0 opacity-0 cursor-pointer" 
-            onChange={(e) => setFile(e.target.files[0])}
-          />
-          <p className="text-xl font-medium">{file ? file.name : "Drop your PDF here or click to upload"}</p>
-          <p className="text-gray-500 text-sm mt-2">Supports PDF, TXT, DOCX</p>
+        <div className="relative">
+          <p className="text-emerald-300 font-bold uppercase text-sm">
+            Study Assistant
+          </p>
+          <h1 className="text-4xl md:text-6xl font-black mt-3">
+            PDF-based revision.
+          </h1>
+          <p className="text-gray-300 mt-4 max-w-2xl">
+            Upload a PDF or paste notes. Summaries and flashcards are created only from your uploaded content.
+          </p>
         </div>
+      </section>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <button onClick={() => handleAIAction("Summary")} className="glass p-6 rounded-3xl hover:bg-blue-600/20 transition-all flex flex-col items-center gap-3">
-            <FileText className="text-blue-400" /> <span className="font-bold">Summarize</span>
-          </button>
-          <button onClick={() => handleAIAction("Flashcards")} className="glass p-6 rounded-3xl hover:bg-purple-600/20 transition-all flex flex-col items-center gap-3">
-            <ListChecks className="text-purple-400" /> <span className="font-bold">Flashcards</span>
-          </button>
-          <button onClick={() => handleAIAction("Quiz")} className="glass p-6 rounded-3xl hover:bg-pink-600/20 transition-all flex flex-col items-center gap-3">
-            <Sparkles className="text-pink-400" /> <span className="font-bold">Quick Quiz</span>
-          </button>
-        </div>
+      <section className="grid xl:grid-cols-[420px_1fr] gap-6">
+        <aside className="space-y-5">
+          <motion.div className="card">
+            <Sparkles className="text-emerald-300" />
+            <p className="text-gray-400 mt-4">Study Plan Generator</p>
 
-        {/* Output Area */}
-        <div className="glass p-8 rounded-[32px] min-h-[200px] text-left relative">
-          <div className="flex items-center gap-2 mb-4 text-blue-400 font-bold uppercase text-xs tracking-widest">
-            <Brain size={16} /> Titi's Analysis
-          </div>
-          {loading ? (
-            <div className="flex items-center gap-3 text-gray-400 animate-pulse">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
-              Titi is thinking...
+            <input
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="Topic e.g. Photosynthesis"
+              className="w-full mt-4"
+            />
+
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <input
+                value={hours}
+                onChange={(e) => setHours(e.target.value)}
+                placeholder="Hours/day"
+                type="number"
+              />
+              <input
+                value={days}
+                onChange={(e) => setDays(e.target.value)}
+                placeholder="Days"
+                type="number"
+              />
             </div>
-          ) : (
-            <p className="text-lg leading-relaxed text-gray-200 whitespace-pre-line">
-              {output || "Upload a file and choose an action to see the magic ✨"}
-            </p>
-          )}
-        </div>
-      </div>
+
+            <button
+              onClick={generatePlan}
+              className="btn w-full mt-4 bg-emerald-500/20 text-emerald-200"
+            >
+              Generate Plan
+            </button>
+          </motion.div>
+
+          <motion.div className="card">
+            <Upload className="text-blue-300" />
+            <p className="text-gray-400 mt-4">Upload PDF / Notes</p>
+
+            <label className="mt-4 flex cursor-pointer items-center justify-center rounded-3xl border border-dashed border-white/20 bg-white/10 p-6 text-center hover:bg-white/15">
+              <input
+                type="file"
+                accept=".pdf,.txt"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <span className="text-gray-300">
+                {fileName ? fileName : "Upload PDF or TXT"}
+              </span>
+            </label>
+
+            <textarea
+              value={notesText}
+              onChange={(e) => setNotesText(e.target.value)}
+              placeholder="Extracted PDF text / pasted notes will appear here..."
+              className="w-full min-h-[220px] mt-4 resize-none rounded-[24px] bg-white/10 border border-white/10 p-4 text-white outline-none"
+            />
+
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <button
+                onClick={summarizeText}
+                disabled={loading}
+                className="btn bg-white/10 text-white"
+              >
+                <FileText size={18} /> Summarize
+              </button>
+
+              <button
+                onClick={makeFlashcards}
+                disabled={loading}
+                className="btn bg-blue-500/20 text-blue-200"
+              >
+                <BookOpen size={18} /> Flashcards
+              </button>
+            </div>
+          </motion.div>
+        </aside>
+
+        <section className="glass rounded-[32px] p-6 md:p-8 min-h-[720px]">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-emerald-300 font-semibold">Output</p>
+              <h2 className="text-3xl font-black mt-1">
+                Generated From Uploaded Content
+              </h2>
+            </div>
+
+            <button
+              onClick={copyOutput}
+              className="btn bg-white/10 text-white"
+            >
+              <Copy size={18} /> Copy
+            </button>
+          </div>
+
+          <div className="mt-6 min-h-[600px] rounded-[28px] bg-white/10 border border-white/10 p-5 overflow-y-auto">
+            {loading ? (
+              <p className="text-gray-300">Reading file...</p>
+            ) : output ? (
+              <p className="whitespace-pre-wrap text-gray-100 leading-relaxed">
+                {output}
+              </p>
+            ) : (
+              <div className="text-gray-400 space-y-3">
+                <p>Upload a PDF or paste notes to generate output.</p>
+                <p>No random content will be generated here.</p>
+              </div>
+            )}
+          </div>
+        </section>
+      </section>
     </div>
-  );
+  )
 }
